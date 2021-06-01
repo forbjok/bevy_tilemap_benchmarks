@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 bevy = "0.5.0"
-bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap.git", rev = "eb299daf347fd135149c7135b4b2a60b7b4c4f4f" }
+bevy_ecs_tilemap = "0.4.0"
 bevy_tilemap = "0.4.0"
