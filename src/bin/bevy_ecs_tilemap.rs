@@ -1,9 +1,9 @@
 use std::time::Instant;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_resource::TextureUsages};
 use bevy_ecs_tilemap::{
     prelude::{LayerBuilder, MapQuery, TileBundle},
-    LayerSettings, Map, Tile, TilemapPlugin,
+    LayerSettings, Map, Tile, TilemapPlugin, TilePos, MapSize, ChunkSize, TileSize, TextureSize,
 };
 
 const TILEMAP_WIDTH: u32 = 1024;
@@ -14,12 +14,34 @@ const CHUNK_WIDTH: u32 = 64;
 const CHUNK_HEIGHT: u32 = 64;
 
 fn main() {
-    App::build()
+    App::new()
         .add_plugins(DefaultPlugins)
+        .add_system(set_texture_filters_to_nearest)
         .add_system(update_tiles_system.system())
         .add_plugin(TilemapPlugin)
         .add_startup_system(setup.system())
         .run();
+}
+
+/// Copy-pasted from the bevy_ecs_tilemap examples.
+/// Without this, the tilemap will not even render.
+pub fn set_texture_filters_to_nearest(
+    mut texture_events: EventReader<AssetEvent<Image>>,
+    mut textures: ResMut<Assets<Image>>,
+) {
+    // quick and dirty, run this for all textures anytime a texture is created.
+    for event in texture_events.iter() {
+        match event {
+            AssetEvent::Created { handle } => {
+                if let Some(mut texture) = textures.get_mut(handle) {
+                    texture.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+                        | TextureUsages::COPY_SRC
+                        | TextureUsages::COPY_DST;
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 fn update_tiles_system(mut commands: Commands, mut count: Local<u32>, mut map_query: MapQuery) {
@@ -33,13 +55,17 @@ fn update_tiles_system(mut commands: Commands, mut count: Local<u32>, mut map_qu
         let sprite_index = i % 4;
 
         for x in 0..TILEMAP_WIDTH {
-            let tile_pos = UVec2::new(x, y);
+            let tile_pos = TilePos(x, y);
             let tile = Tile {
                 texture_index: sprite_index as u16,
                 ..Default::default()
             };
 
-            map_query.set_tile(&mut commands, tile_pos, tile, 0u16, 0u16).unwrap();
+            if let Ok(tile_entity) = map_query.get_tile_entity(tile_pos, 0u16, 0u16) {
+                commands.entity(tile_entity).insert(tile);
+            } else {
+                map_query.set_tile(&mut commands, tile_pos, tile, 0u16, 0u16).unwrap();
+            }
         }
 
         i += 1;
@@ -51,22 +77,20 @@ fn update_tiles_system(mut commands: Commands, mut count: Local<u32>, mut map_qu
 fn setup(
     asset_server: Res<AssetServer>,
     mut commands: Commands,
-    mut color_materials: ResMut<Assets<ColorMaterial>>,
     mut map_query: MapQuery,
 ) {
     let texture_handle = asset_server.load("textures/tilesheet.png");
-    let color_material_handle = color_materials.add(ColorMaterial::texture(texture_handle));
 
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     // Create tilemap (bevy_ecs_tilemap)
 
-    let tile_size = Vec2::new(TILE_WIDTH as f32, TILE_HEIGHT as f32);
-    let texture_size = Vec2::new(64.0, 16.0);
+    let tile_size = TileSize(TILE_WIDTH as f32, TILE_HEIGHT as f32);
+    let texture_size = TextureSize(64.0, 16.0);
 
     let mut layer_settings = LayerSettings::new(
-        UVec2::new(TILEMAP_WIDTH / CHUNK_WIDTH, TILEMAP_HEIGHT / CHUNK_HEIGHT),
-        UVec2::new(CHUNK_WIDTH, CHUNK_HEIGHT),
+        MapSize(TILEMAP_WIDTH / CHUNK_WIDTH, TILEMAP_HEIGHT / CHUNK_HEIGHT),
+        ChunkSize(CHUNK_WIDTH, CHUNK_HEIGHT),
         tile_size,
         texture_size,
     );
@@ -74,14 +98,14 @@ fn setup(
     // Disable culling
     layer_settings.cull = false;
 
-    let (layer_builder, layer_entity) = LayerBuilder::<TileBundle>::new(&mut commands, layer_settings, 0u16, 0u16);
-
-    map_query.build_layer(&mut commands, layer_builder, color_material_handle);
-
     // Create map entity and component:
     let map_entity = commands.spawn().id();
-
     let mut map = Map::new(0u16, map_entity);
+
+    let (layer_builder, layer_entity) = LayerBuilder::<TileBundle>::new(&mut commands, layer_settings, 0u16, 0u16);
+
+    map_query.build_layer(&mut commands, layer_builder, texture_handle);
+
     map.add_layer(&mut commands, 0u16, layer_entity);
 
     // Insert Map component in map entity
