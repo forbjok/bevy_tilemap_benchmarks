@@ -3,7 +3,7 @@ use std::time::Instant;
 use bevy::{prelude::*, render::render_resource::TextureUsages};
 use bevy_ecs_tilemap::{
     prelude::{LayerBuilder, MapQuery, TileBundle},
-    LayerSettings, Map, Tile, TilemapPlugin, TilePos, MapSize, ChunkSize, TileSize, TextureSize,
+    ChunkSize, LayerSettings, Map, MapSize, TextureSize, Tile, TilePos, TileSize, TilemapPlugin,
 };
 
 const TILEMAP_WIDTH: u32 = 1024;
@@ -17,9 +17,9 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_system(set_texture_filters_to_nearest)
-        .add_system(update_tiles_system.system())
+        .add_system(update_tiles_system)
         .add_plugin(TilemapPlugin)
-        .add_startup_system(setup.system())
+        .add_startup_system(setup)
         .run();
 }
 
@@ -31,15 +31,11 @@ pub fn set_texture_filters_to_nearest(
 ) {
     // quick and dirty, run this for all textures anytime a texture is created.
     for event in texture_events.iter() {
-        match event {
-            AssetEvent::Created { handle } => {
-                if let Some(mut texture) = textures.get_mut(handle) {
-                    texture.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
-                        | TextureUsages::COPY_SRC
-                        | TextureUsages::COPY_DST;
-                }
+        if let AssetEvent::Created { handle } = event {
+            if let Some(mut texture) = textures.get_mut(handle) {
+                texture.texture_descriptor.usage =
+                    TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC | TextureUsages::COPY_DST;
             }
-            _ => (),
         }
     }
 }
@@ -74,11 +70,7 @@ fn update_tiles_system(mut commands: Commands, mut count: Local<u32>, mut map_qu
     dbg!(upd_tiles.elapsed());
 }
 
-fn setup(
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-    mut map_query: MapQuery,
-) {
+fn setup(asset_server: Res<AssetServer>, mut commands: Commands, mut map_query: MapQuery) {
     let texture_handle = asset_server.load("textures/tilesheet.png");
 
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
