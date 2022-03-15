@@ -62,6 +62,8 @@ fn update_tiles_system(mut commands: Commands, mut count: Local<u32>, mut map_qu
             } else {
                 map_query.set_tile(&mut commands, tile_pos, tile, 0u16, 0u16).unwrap();
             }
+
+            map_query.notify_chunk_for_tile(tile_pos, 0u16, 0u16);
         }
 
         i += 1;
